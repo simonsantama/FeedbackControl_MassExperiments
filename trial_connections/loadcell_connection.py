@@ -11,7 +11,7 @@ import time
 import numpy as np
 import pickle
 
-# -- establish the desired logging period (1/f)
+# establish the desired logging frequency
 logging_frequency = 0.1
 # IP address and port (scale) - STATIC
 IP_scale = "192.168.127.254"
@@ -53,14 +53,17 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
     # connect to the terminal
     s.connect((IP_scale, PORT_scale))
-    print("que paso")
-    # print(s.recv(1024).decode())
 
-#         # set time out time for connections (seconds)
-#         s.settimeout(3)
+    # set time out time for connections (seconds)
+    s.settimeout(3)
 
-#         # log on (find out why no user name is required, but so far, this is the only way it works)
-#         send_recv(s, "user")
+    # log on (find out why no user name is required, but so far, this is the only way it works)
+    send_recv(s, "user")
+
+    # read from the load cell
+    response = send_recv(s, "read wt0101")
+    print(response)
+
 
 #         # timer to ensure logging frequency of 10 Hz
 #         start = time.time()
