@@ -9,6 +9,7 @@ and 10 weight measurements
 import socket
 import time
 import numpy as np
+import re
 
 class MettlerToledoDevice(object):
     """
@@ -19,7 +20,8 @@ class MettlerToledoDevice(object):
     """
 
     IP_scale = "192.168.127.254"
-    PORT_scale = 4001 
+    PORT_scale = 4001
+    timeout_seconds = 1
 
     def __init__(self):
         """
@@ -31,7 +33,7 @@ class MettlerToledoDevice(object):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             # set time out time for connections (seconds)
-            s.settimeout(1)
+            s.settimeout(self.timeout_seconds)
 
             # connect to the terminal
             try:
@@ -44,8 +46,23 @@ class MettlerToledoDevice(object):
             # cancel (same as disconnecting and reconnecting)
             request = self._fomat_request("@")
             s.sendall(request)
-            response = s.recv(1024).decode()
-            print(f"\nSucessful connection with {response.split()}")
+            
+            response = []
+            # keep calling receive until the end of line symbols are received
+            response = []
+            while True:
+                part_response = s.recv(1024).decode()
+                response.append(part_response)
+                
+                if ("\r" in part_response) or ("\n" in part_response):
+                    break
+
+            # format the reponse
+            response_str = str(response).strip('[]')
+            parsed_response = re.findall(r'\b\d+\b', response_str)
+            parsed_response = int("".join(parsed_response))
+
+            print(f"\nSucessful connection with S/N {parsed_response}")
 
 
     def _fomat_request(self, request):
@@ -79,8 +96,23 @@ class MettlerToledoDevice(object):
             # send stable weight or, if timeout (in ms), then send dynamic weight
             request = self._fomat_request("SC 420")
             s.sendall(request)
-            response = s.recv(1024).decode()
-            return response.split()
+
+            # keep calling receive until the end of line symbols are received
+            response = []
+            while True:
+                part_response = s.recv(1024).decode()
+                response.append(part_response)
+                
+                if ("\r" in part_response) or ("\n" in part_response):
+                    break
+
+            # format the reponse
+            response_str = str(response).strip('[]')
+            parsed_response = re.findall(r'\b\d+\b', response_str)
+            weight = int(parsed_response[0]) + int(parsed_response[1])/100
+
+
+            return weight
 
 
 load_cell = MettlerToledoDevice()
