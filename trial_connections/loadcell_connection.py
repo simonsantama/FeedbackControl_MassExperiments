@@ -1,116 +1,91 @@
 """
 This is a trial script to communicate with the FPA's load cell
+Creates a Mettler toledo class based on the code by:
+https://github.com/janelia-pypi and outputs the serial number
+and 10 weight measurements
+
 """
 
-# import libraries
 import socket
-import csv
-import msvcrt
-import os
 import time
 import numpy as np
-import pickle
 
-# establish the desired logging frequency
-logging_frequency = 0.1
-# IP address and port (scale) - STATIC
-IP_scale = "192.168.127.254"
-PORT_scale = 4001
-# boolean used for zeroing mass
-first_reading = True
-
-
-# # -- request and store name of the file (friendly user, no parsing)
-# filename = input("Insert test name: ")
-# filename = f"{filename}.csv"
-# # check that the file doesn't exists in this folder
-# while os.path.isfile(filename):
-#     print("File already exists")
-#     filename = input("Insert test name: ")
-#     filename = f"{filename}.csv"
-
-# # data storage to save as pickle for quiker reading by plotting algorithm
-# all_data = {"time": [], "ACM": [], "ACMtray": [], "Insulationtray": [], "Insulation": []}
-
-
-def send_recv(s, command):
+class MettlerToledoDevice(object):
     """
-    Sends command to IND780 unit and receives response string
+    Creates a MettlerToledoDevice class which can be used to query the weight from the
+    load cell.
+    Designed for connection with the FPA load cell (TCP/IP) so the IP address and PORT number
+    are hard-coded into the class.
     """
-    command = bytes(f"{command} \r\n", "utf-8")
-    s.sendall(command)
-    return(s.recv(1024).decode())
+
+    IP_scale = "192.168.127.254"
+    PORT_scale = 4001 
+
+    def __init__(self):
+        """
+        Initializes the class by checking that connection is possible and then
+        running the cancel command to erase any previous commands.
+        """
+
+        # open socket connection (TCP/IP)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+
+            # set time out time for connections (seconds)
+            s.settimeout(1)
+
+            # connect to the terminal
+            try:
+                s.connect((self.IP_scale, self.PORT_scale))
+            except Exception as e:
+                print("\nCouldn't connect to the load cell when initiating the MettlerToledoDevice")
+                print(f"Exception: {e}\n")
 
 
-# # -- open csv file to store results
-# with open(filename, mode="w", newline="") as f:
-#     filewriter = csv.writer(f, delimiter=',')
-#     filewriter.writerow(["Time", "LC1_ACM", "LC2_ACM_tray", "LC3_insulation_tray",
-#                          "LC4_insulation"])
-
-# -- open the TCP/IP socket
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-
-    # connect to the terminal
-    s.connect((IP_scale, PORT_scale))
-
-    # set time out time for connections (seconds)
-    s.settimeout(3)
-
-    # log on (find out why no user name is required, but so far, this is the only way it works)
-    send_recv(s, "user")
-
-    # read from the load cell
-    response = send_recv(s, "read wt0101")
-    print(response)
+            # cancel (same as disconnecting and reconnecting)
+            request = self._fomat_request("@")
+            s.sendall(request)
+            response = s.recv(1024).decode()
+            print(f"\nSucessful connection with {response.split()}")
 
 
-#         # timer to ensure logging frequency of 10 Hz
-#         start = time.time()
-#         beginning = start
+    def _fomat_request(self, request):
+        """
+        Formats the command according to MT-SICS requirements
+        """
+        request = bytes(f"{request} \r\n", "ascii")
+        return request
 
-#         # -- scan mass until stopped
-#         while True:
-#             try:
 
-#                 # verify condition that forces the logging frequency
-#                 if time.time() - start < logging_frequency:
-#                     continue
+    def query_weight(self):
+        """
+        Queries the weight.
+        Prefers a stable readings but if time out is reached, it reads a dynamic weight
 
-#                 # read the list of masss from the load cell
-#                 response = send_recv(s, "read wt0101 wt0201 wt0301 wt0401")
+        """
+        # open socket connection (TCP/IP)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
-#                 # separate the string into independent readings
-#                 mass_0 = float(response.split("~")[1:-1][0]) * 1000
-#                 mass_1 = float(response.split("~")[1:-1][1]) * 1000
-#                 mass_2 = float(response.split("~")[1:-1][2]) * 1000
-#                 mass_3 = float(response.split("~")[1:-1][3]) * 1000
-#                 all_masses = [mass_0, mass_1, mass_2, mass_3]
+            # set time out time for connections (seconds)
+            s.settimeout(1)
 
-#                 # write data into the .csv ile
-#                 filewriter.writerow([time.time() - beginning, all_masses[0], all_masses[1], all_masses[2], all_masses[3]])
-#                 print("Writing to .csv file ...")
-#                 print(np.round(time.time() - beginning, 1), np.round(mass_0, 1), np.round(mass_1, 1), np.round(mass_2, 1),
-#                       np.round(mass_3, 1))
+            # connect to the terminal
+            try:
+                s.connect((self.IP_scale, self.PORT_scale))
+            except Exception as e:
+                print("Couldn't connect to the load cell when quering weight")
+                print(f"Exception: {e}")
 
-#                 all_data["time"].append(time.time() - beginning)
-#                 all_data["ACM"].append(all_masses[0])
-#                 all_data["ACMtray"].append(all_masses[1])
-#                 all_data["Insulationtray"].append(all_masses[2])
-#                 all_data["Insulation"].append(all_masses[3])
 
-#                 with open(f"{filename.split('.')[0]}.pickle", 'wb') as handle:
-#                     pickle.dump(all_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            # send stable weight or, if timeout (in ms), then send dynamic weight
+            request = self._fomat_request("SC 420")
+            s.sendall(request)
+            response = s.recv(1024).decode()
+            return response.split()
 
-#                 # end if ESC is pressed
-#                 if msvcrt.kbhit():
-#                     if ord(msvcrt.getch()) == 27:
-#                         break
 
-#                 # re-establish start for the next reading
-#                 start = time.time()
+load_cell = MettlerToledoDevice()
 
-#             # deal with instantaneous errors in the communication
-#             except:
-#                 print("Instantaneous communication error, logging continues")
-#                 pass
+start = time.time()
+for i in range(10):
+    print(f"{i} ------- {np.round(time.time() - start,2)} seconds")
+    print(f"{load_cell.query_weight()}\n")
