@@ -59,7 +59,7 @@ class MettlerToledoDevice(object):
             parsed_response = re.findall(r'\b\d+\b', response_str)
             parsed_response = int("".join(parsed_response))
 
-            print(f"Sucessful connection with S/N {parsed_response}")
+            print(f"Successful connection with S/N {parsed_response}")
 
 
     def _fomat_request(self, request):
@@ -106,7 +106,12 @@ class MettlerToledoDevice(object):
             # format the reponse
             response_str = str(response).strip('[]')
             parsed_response = re.findall(r'\b\d+\b', response_str)
-            weight = int(parsed_response[0]) + int(parsed_response[1])/100
+            if len(parsed_response) == 2:
+                weight = float(parsed_response[0]) + float(parsed_response[1])/100
+            elif len(parsed_response) == 3:
+                weight = float(parsed_response[0])*1000 + float(parsed_response[1]) + float(parsed_response[2])/100
+            else:
+                weight = 0
 
 
             return weight
