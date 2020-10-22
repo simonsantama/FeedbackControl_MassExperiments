@@ -4,7 +4,7 @@ PID function to calculate the IHF based on a set point and the current reading
 import time
 import numpy as np
 
-def PID_IHF(Input, Setpoint, previous_time, lastErr, lastInput, errSum):
+def PID_IHF(Input, Setpoint, previous_time, lastErr, lastInput, errSum, first_activation):
     """
     Uses a PID algorithm to calculate the IHF based on target and current nhf
     Output: IHF. Input: NHF: Setpoint: Target NHF.
@@ -27,9 +27,9 @@ def PID_IHF(Input, Setpoint, previous_time, lastErr, lastInput, errSum):
     Output_min = 0
 
     # Define the k constants (determined experimentally)
-    kp = 0.35
-    ki = 0.05
-    kd = 0.01
+    kp = 0.30
+    ki = 0.04
+    kd = 0.02
 
     # How long since we last calculated
     now = time.time()
@@ -46,8 +46,7 @@ def PID_IHF(Input, Setpoint, previous_time, lastErr, lastInput, errSum):
     # Compute the Output
     Output = kp * error + ki * errSum - kd * dInput
 
-    print(f"PID. Error: {np.round(error,2)}, errSum: {np.round(errSum,2)}, Output: {np.round(Output,2)}")
-    print(f"last input: {lastInput}")
+    print("PID active")
 
     # protects the FPA
     if Output > Output_max:
@@ -55,4 +54,8 @@ def PID_IHF(Input, Setpoint, previous_time, lastErr, lastInput, errSum):
     elif Output < Output_min:
         Output = Output_min
 
-    return Output, now, error, errSum
+    if first_activation and (Output < 1):
+        Output = 1
+        first_activation = False
+
+    return Output, now, error, errSum, first_activation

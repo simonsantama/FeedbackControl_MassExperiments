@@ -81,6 +81,10 @@ surface_area = 0.1*0.1
 averaging_window = 50
 irradiation_rate = 0.5
 PID_state = "not_active"
+first_activation = True
+
+# convert irradiation rate using the calibration coefficients (from kW/m-2s to volts/s)
+irradiation_rate = irradiation_rate/50
 
 # create arrays large enough to accomodate one hour of data at the pre-set maximum logging frequency
 t_array = np.zeros(int(3600/time_logging_period))
@@ -147,10 +151,6 @@ with open(name_of_file, "w", newline = "") as handle:
 	# define additional parameters for start of test
 	# ------
 
-	# define ramp for the IHF to follow until the activation of the PID
-	IHF[time_step:] = 3
-
-	# additional parameters
 	bool_start_test = True
 	bool_PID_active = False
 	time_start_test = time.time()
@@ -177,13 +177,18 @@ with open(name_of_file, "w", newline = "") as handle:
 
 				# calculate mlr and force all negative readings to zero
 				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
-				# mlr[mlr<0]=0
 				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()
 				mlr_moving_average_array[time_step] = mlr_moving_average	
 
 				# start with a ramped IHF, and once mlr reaches 0.75*mlr_desired, activate PID
 				if PID_state == "not_active":
+					IHF[time_step+1] = (t_array[time_step] - t_array[0]) * irradiation_rate
 					voltage_output = IHF[time_step+1]
+
+					if voltage_output > 4.5:
+						voltage_output = 4.5
+						IHF[time_step+1] = 4.5
+
 					if mlr_moving_average > 0.75*mlr_desired:
 						PID_state = "active"
 						print("\n-----")
@@ -192,15 +197,15 @@ with open(name_of_file, "w", newline = "") as handle:
 
 						# set pid parameters
 						previous_pid_time = time.time()
-						last_error = 0
+						last_error = mlr_desired - mlr_moving_average
 						last_input = IHF[time_step]
 						pid_error_sum = 0
 
 				# call PID
 				elif PID_state == "active":
-					voltage_output, previous_pid_time, last_error, pid_error_sum = PID(
-						mlr_moving_average, mlr_desired, 
-						previous_pid_time, last_error, last_input, pid_error_sum)
+					voltage_output, previous_pid_time, last_error, pid_error_sum, first_activation = PID(
+											mlr_moving_average, mlr_desired, previous_pid_time, 
+											last_error, last_input, pid_error_sum, first_activation)
 					IHF[time_step+1] = voltage_output
 					last_input = voltage_output
 
@@ -209,13 +214,13 @@ with open(name_of_file, "w", newline = "") as handle:
 
 				# write data to the csv file
 				if bool_start_test:
-					writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], mlr_moving_average, "start_test", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], voltage_output, mlr[time_step], mlr_moving_average, "start_test", PID_state]])
 					bool_start_test = False
 				else:
-					writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], mlr_moving_average, "", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], voltage_output, mlr[time_step], mlr_moving_average, "", PID_state]])
 
 				# print the result of this iteration to the terminal window
-				print(f"time:{np.round(t_array[time_step],2)} - IHF:{IHF[time_step+1]} - mass: {mass[time_step]} - mlr:{np.round(mlr_moving_average,2)}\n")
+				print(f"time:{np.round(t_array[time_step],2)} - IHF:{np.round(IHF[time_step+1],2)} - mass: {mass[time_step]} - mlr:{np.round(mlr_moving_average,2)}\n")
 
 				previous_log = time.time()
 
