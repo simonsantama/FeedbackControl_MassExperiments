@@ -9,14 +9,15 @@ http://brettbeauregard.com/blog/2011/04/improving-the-beginners-pid-introduction
 import time
 import numpy as np
 
-def PID_IHF(current_input, setpoint, previous_time, last_error, last_input, integral_term, kp, ki, kd, max_lamp_voltage):
+def PID_IHF(current_input, setpoint, previous_time, last_error, last_input, integral_term, kp, ki, kd, max_lamp_voltage,
+	min_lamp_voltage):
     """
     Uses a PID algorithm to calculate the IHF based a target mlr and the current mlr calculated
 
 
 	Parameters:
 	----------
-	input: float
+	current_input: float
 		current mlr (calculated instantaneously and then averaged for smoothing)
 
 	setpoint: float
@@ -42,6 +43,12 @@ def PID_IHF(current_input, setpoint, previous_time, last_error, last_input, inte
 
 	kd: float
 		derivate coefficient
+
+	max_lamp_voltage: float
+		maximum voltage that can be send to the FPA lamps
+
+	min_lamp_voltage: float
+		minimum voltage that can send to the FPA lamps
 
 
 	Returns:

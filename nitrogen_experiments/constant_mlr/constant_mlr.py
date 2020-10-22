@@ -19,6 +19,7 @@ import sys
 import time
 import msvcrt
 import csv
+import os
 
 # add path to import functions and classes (absolute path on the FPA's computer)
 sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\classes_and_functions")
@@ -68,6 +69,13 @@ rm, logger = DataLogger().new_instrument()
 
 mlr_desired = 2
 name_of_file = "test_output.csv"
+name_of_folder = name_of_file.split(".")[0]
+full_name_of_file = os.path.join(name_of_folder, name_of_file)
+# create folder with the name of the file
+if not os.path.exists(name_of_folder):
+	os.mkdir(name_of_folder)
+
+
 #####
 # INITIALIZE USEFUL PARAMETERS AND START TEST
 #####
@@ -103,7 +111,7 @@ mlr = np.zeros_like(t_array)
 mlr_moving_average_array = np.zeros_like(t_array)
 
 # open csv file to write data
-with open(name_of_file, "w", newline = "") as handle:
+with open(full_name_of_file, "w", newline = "") as handle:
 	writer = csv.writer(handle)
 	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", 
 		"mlr_movingaverage_gm-2s-1", "Observations", "PID_state"]])
@@ -209,7 +217,7 @@ with open(name_of_file, "w", newline = "") as handle:
 						previous_pid_time = time.time()
 						last_error = mlr_desired - mlr_moving_average
 						last_input = mlr_moving_average
-						pid_integral_term = 0
+						pid_integral_term = voltage_output
 
 				# call PID
 				elif PID_state == "active":
