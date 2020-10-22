@@ -2,8 +2,16 @@
 FPA experiments
 This algorithm uses a PID to control the IHF from the FPA's lamps so that samples pyrolyse at a constant mlr
 
-Uses the PID algorithm developed by 
+Experimental procedure:
+1. Lamps follow a linear heating ramp, with lambda (irradiation rate) = 0.5 kW/m^2 until the mlr is within 25% of the desired value
+2. Once the mlr is within the desired value, the control of the lamps is passed to the PID controller, until the test is ended.
+
+
 """
+
+#####
+# IMPORT LIBRARIES, CLASSES AND FUNCTIONS
+#####
 
 # libraries
 import numpy as np
@@ -12,11 +20,16 @@ import time
 import msvcrt
 import csv
 
-# add path to import functions and classes
+# add path to import functions and classes (absolute path on the FPA's computer)
 sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\classes_and_functions")
 from loadcell import MettlerToledoDevice
 from datalogger import DataLogger
 from PID import PID_IHF as PID
+
+
+#####
+# CONNECT TO LOAD CELL AND DATA LOGGER AND INSTANTIATE CLASSES
+#####
 
 # create instance of the load cell class and check connection
 print("\nConnection to load cell")
@@ -26,118 +39,174 @@ load_cell = MettlerToledoDevice()
 print("\nConnection to data logger")
 rm, logger = DataLogger().new_instrument()
 
-##### ---- constant mlr ----- ####
-mlr_desired = 2
 
-# start test
+#####
+# REQUEST FROM THE USER THE DESIRED MLR (CONSTANT) AND THE NAME OF THE EXPERIMENT
+#####
+while True:
+	try:
+		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test: "))
+		number_of_test = input("Input number of test in format XXX": )
+		material = input("Input material: ")
+
+		name_of_file = f"N2_{number_of_test}_{material}_{mlr_desired}gm-2s-1.csv"
+
+		# confirm the values entered by user
+		confirmation = input(f"\nDesired mlr = {mlr_desired} g/m2s. \nName of file: {name_of_file}.\nProceed?")
+		if not confirmation.lower() in ["yes", "y"]:
+			continue
+		else:
+			break
+
+	except Exception as e:
+		print("Invalid file name or mlr")
+
+		# turn off the lamps and close the instrument
+		logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
+		logger.close()
+		rm.close()
+
+mlr_desired = 2
+name_of_file = "test_output.csv"
+#####
+# INITIALIZE USEFUL PARAMETERS AND START TEST
+#####
+
 print("Starting test")
 time.sleep(2)
-start_time = time.time()
-previous_log = start_time
-pretesting_period = 30
+
+time_pretesting_period = 30
+time_logging_period = 0.1
+surface_area = 0.1*0.1
+averaging_window = 50
+irradiation_rate = 0.5
+PID_state = "not_active"
 
 # create arrays large enough to accomodate one hour of data at 10 Hz for each experiment
-IHF = np.zeros(3600*10)
-t_array = np.zeros_like(IHF)
-mass = np.zeros_like(IHF)
-mlr = np.zeros_like(IHF)
+t_array = np.zeros(3600*10)
+IHF = np.zeros_like(t_array)
+mass = np.zeros_like(t_array)
+mlr = np.zeros_like(t_array)
 
-logging_period = 0.1
-
-# open file to dump all the data
-with open("test_output.csv", "w", newline = "") as handle:
+# open csv file to write data
+with open(name_of_file, "w", newline = "") as handle:
 	writer = csv.writer(handle)
-	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", "mlr_linearfit_gm-2s-1", "Observations"]])
+	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", "mlr_linearfit_gm-2s-1", "Observations", "PID_state"]])
 
 	# record the number of readings
-	step = 0
+	time_step = 0
 
-	# record mass for a period of 60 seconds before starting the test
+	# ------
+	# record mass for a period of 60 seconds before starting
+	# ------
 	print("\nGathering of data for 60 seconds before testing")
 	time.sleep(2)
 
-	start_pretesting_period = time.time()
-	while time.time() - start_pretesting_period < pretesting_period:
+	time_start_logging = time.time()
+	previous_log = time.time()
+	while time.time() - time_start_logging < time_pretesting_period:
 
-		# force a logging frequency of approx. 10 Hz (dno't want anything more than that)
-		if time.time() - previous_log < 0.1:
+		# enforce a maximum logging frequency of 20 Hz
+		if time.time() - previous_log < 0.05:
 			pass
 		else:
 
-			t_array[step] = time.time() - start_time
-			mass[step] = load_cell.query_weight()
+			t_array[time_step] = time.time() - time_start_logging
+			mass[time_step] = load_cell.query_weight()
 
-			if step == 0:
-				writer.writerows([[t_array[step], mass[step], IHF[step], 0, 0, "start_logging"]])
+			if time_step == 0:
+				mlr[time_step] = 0
 			else:
-				writer.writerows([[t_array[step], mass[step], IHF[step], 0, 0,""]])
+				# calculate mlr and force all negative readings to zero
+				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
+				mlr[mlr<0]=0
 
-			step += 1
+				# while I haven't done the necessary number of readings, averaging window needs to be smaller
+				averaging_window_pretest = np.min([averaging_window, time_step])
+				mlr_moving_average = mlr[time_step - averaging_window_pretest:time_step].mean()			
+
+			if time_step == 0:
+				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], 0, 0, "start_logging", PID_state]])
+			else:
+				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], 0, 0,"", PID_state]])
 
 			previous_log = time.time()
+			step += 1
 
 		# end if ESC is pressed
 		if msvcrt.kbhit():
 			if ord(msvcrt.getch()) == 27:
 				break
 
-	# additional parameters
-	bool_starttest = True
-	time_starttest = t_array[step]
-	previous_log = time_starttest
+	# ------
+	# define additional parameters for start of test
+	# ------
 
-	pid_input = 0
-	pid_setpoint = mlr_desired
-	previous_time = 0
-	lastErr = 0
-	lastInput = 0
-	errSum = 0
+
+	# additional parameters
+	bool_start_test = True
+	bool_PID_active = False
+	time_start_test = time.time()
+	previous_log = time_start_test
 
 
 	while True:
 		try:
 
-			# force a logging frequency of approx. 10 Hz (don't want anything more than that)
-			if time.time() - previous_log < 0.1:
+			# enforce a maximum logging frequency of 20 Hz
+			if time.time() - previous_log < 0.05:
 				pass
 			else:
 
 				# record time for this reading
-				t_array[step] = time.time() - start_time
+				t_array[time_step] = time.time() - time_start_logging
 
 				# query mass and update array
-				mass[step] = load_cell.query_weight()
+				mass[time_step] = load_cell.query_weight()
 				
 				# calculate the instantaneous mlr
 				mlr[step] = - np.round((mass[step] - mass[step-1]) / (t_array[step] - t_array[step-1])/0.1/0.1,1)
 
-
-				# evaluate the mlr average and send new IHF to lamps
+				# calculate mlr and force all negative readings to zero
+				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
 				mlr[mlr<0]=0
-				mlr_moving_average = mlr[step-25:step].mean()
+				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()	
 
-				## call the PID ##
-				IHF[step+1], previous_time, lastErr, lastInput, errSum = PID(
-					mlr_moving_average, pid_setpoint, previous_time, lastErr, lastInput, errSum)
-				print("----")
-				print(IHF[step+1])
+				# start with a ramped IHF, and once mlr reaches 0.75*mlr_desired < mlr activate PID
+				if PID_state == "not_active":
+					voltage_output_lamps = IHF[time_step+1]
+					if not mlr_moving_average < 0.75*mlr:
+						PID_state == "active"
+						print("\n-----")
+						print("PID ACTIVE")
+						print("-----\n")
 
-				# write IHF to the lamps
-				logger.write(':SOURce:VOLTage %G,(%s)' % (IHF[step+1], '@304'))
+				# call PID
+				if PID_state == "active":
+					
 
-				# annotate the start of the test
-				if bool_starttest:
-					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "start_test"]])
-					bool_starttest = False
-				else:
-					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, ""]])
+				# ## call the PID ##
+				# IHF[step+1], previous_time, lastErr, lastInput, errSum = PID(
+				# 	mlr_moving_average, pid_setpoint, previous_time, lastErr, lastInput, errSum)
+				# print("----")
+				# print(IHF[step+1])
 
-				# print the result of this iteration to the terminal window
-				print(f"\ntime:{np.round(t_array[step],2)} - IHF:{IHF[step+1]} - mass: {mass[step]} - mlr:{np.round(mlr_moving_average,2)}")
+				# # write IHF to the lamps
+				# logger.write(':SOURce:VOLTage %G,(%s)' % (IHF[step+1], '@304'))
 
-				previous_log = time.time()
+				# # annotate the start of the test
+				# if bool_starttest:
+				# 	writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "start_test"]])
+				# 	bool_starttest = False
+				# else:
+				# 	writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, ""]])
 
-				step += 1
+				# # print the result of this iteration to the terminal window
+				# print(f"\ntime:{np.round(t_array[step],2)} - IHF:{IHF[step+1]} - mass: {mass[step]} - mlr:{np.round(mlr_moving_average,2)}")
+
+				# previous_log = time.time()
+
+				# step += 1
  
 			# end if ESC is pressed
 			if msvcrt.kbhit():
@@ -158,34 +227,16 @@ with open("test_output.csv", "w", newline = "") as handle:
 					break
 
 
-# volt = 1
-# for i in range(10):
-# 	logger.write(':SOURce:VOLTage %G,(%s)' % (volt, '@304'))
-# 	if volt:
-# 		volt = 0
-# 	else:
-# 		volt = 1
-# 	print(volt)
-
-# 	time.sleep(2)
+#####
+# CLOSE CONNECTION TO THE LOGGER, TURN OFF LAMPS AND FINISH THE EXPERIMENT
+#####
 
 # turn off the lamps and close the instrument
 logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
 logger.close()
 rm.close()
 
-
-
 # finish the experiment
 print("\n\nExperiment finished")
 print(f"Total duration = {np.round((time.time() - start_time)/60,1)} minutes")
-
-# # ask from the user the mlr that is to be kept constant
-# while True:
-# 	constant_mlr = input("\nInput mlr to be kept constant throughout the test: ")
-# 	confirmation = input(f"MLR is: {constant_mlr}. Proceed? ")
-# 	if not confirmation.lower() in ["yes", "y"]:
-# 		continue
-# 	else:
-# 		break
 
