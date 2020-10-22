@@ -76,22 +76,23 @@ print("Starting test")
 time.sleep(2)
 
 time_pretesting_period = 30
-time_logging_period = 0.1
+time_logging_period = 0.05
 surface_area = 0.1*0.1
 averaging_window = 50
 irradiation_rate = 0.5
 PID_state = "not_active"
 
-# create arrays large enough to accomodate one hour of data at 10 Hz for each experiment
-t_array = np.zeros(3600*10)
+# create arrays large enough to accomodate one hour of data at the pre-set maximum logging frequency
+t_array = np.zeros(3600/time_logging_period)
 IHF = np.zeros_like(t_array)
 mass = np.zeros_like(t_array)
 mlr = np.zeros_like(t_array)
+mlr_moving_average_array = np.zeros_like(t_array)
 
 # open csv file to write data
 with open(name_of_file, "w", newline = "") as handle:
 	writer = csv.writer(handle)
-	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", "mlr_linearfit_gm-2s-1", "Observations", "PID_state"]])
+	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", "mlr_movingaverage_gm-2s-1", "Observations", "PID_state"]])
 
 	# record the number of readings
 	time_step = 0
@@ -107,7 +108,7 @@ with open(name_of_file, "w", newline = "") as handle:
 	while time.time() - time_start_logging < time_pretesting_period:
 
 		# enforce a maximum logging frequency of 20 Hz
-		if time.time() - previous_log < 0.05:
+		if time.time() - previous_log < time_logging_period:
 			pass
 		else:
 
@@ -123,12 +124,16 @@ with open(name_of_file, "w", newline = "") as handle:
 
 				# while I haven't done the necessary number of readings, averaging window needs to be smaller
 				averaging_window_pretest = np.min([averaging_window, time_step])
-				mlr_moving_average = mlr[time_step - averaging_window_pretest:time_step].mean()			
+				mlr_moving_average = mlr[time_step - averaging_window_pretest:time_step].mean()
+				mlr_moving_average_array[time_step] = mlr_moving_average			
 
+			# write data to the csv file
 			if time_step == 0:
-				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], 0, 0, "start_logging", PID_state]])
+				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], 
+					mlr_moving_average_array[time_step], "start_logging", PID_state]])
 			else:
-				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], 0, 0,"", PID_state]])
+				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step],
+					mlr_moving_average_array[time_step],"", PID_state]])
 
 			previous_log = time.time()
 			step += 1
@@ -154,7 +159,7 @@ with open(name_of_file, "w", newline = "") as handle:
 		try:
 
 			# enforce a maximum logging frequency of 20 Hz
-			if time.time() - previous_log < 0.05:
+			if time.time() - previous_log < time_logging_period:
 				pass
 			else:
 
@@ -170,7 +175,8 @@ with open(name_of_file, "w", newline = "") as handle:
 				# calculate mlr and force all negative readings to zero
 				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
 				mlr[mlr<0]=0
-				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()	
+				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()
+				mlr_moving_average_array[time_step] = mlr_moving_average	
 
 				# start with a ramped IHF, and once mlr reaches 0.75*mlr_desired < mlr activate PID
 				if PID_state == "not_active":
@@ -181,32 +187,34 @@ with open(name_of_file, "w", newline = "") as handle:
 						print("PID ACTIVE")
 						print("-----\n")
 
+						# set pid parameters
+						previous_pid_time = time.time()
+						last_error = 0
+						last_input = 0
+						error_sum = 0
+
 				# call PID
 				if PID_state == "active":
-					
+					voltage_output, previous_pid_time, last_error, last_input, pid_error_sum = PID(mlr_moving_average, mlr_desired, 
+						previous_pid_time, last_error, last_input, pid_error_sum)
+					IHF[time_step+1] = voltage_output
 
-				# ## call the PID ##
-				# IHF[step+1], previous_time, lastErr, lastInput, errSum = PID(
-				# 	mlr_moving_average, pid_setpoint, previous_time, lastErr, lastInput, errSum)
-				# print("----")
-				# print(IHF[step+1])
+				# write IHF to the lamps
+				logger.write(':SOURce:VOLTage %G,(%s)' % (voltage_output, '@304'))
 
-				# # write IHF to the lamps
-				# logger.write(':SOURce:VOLTage %G,(%s)' % (IHF[step+1], '@304'))
+				# write data to the csv file
+				if bool_start_test:
+					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "start_test", PID_state]])
+					bool_start_test = False
+				else:
+					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "", PID_state]])
 
-				# # annotate the start of the test
-				# if bool_starttest:
-				# 	writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "start_test"]])
-				# 	bool_starttest = False
-				# else:
-				# 	writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, ""]])
+				# print the result of this iteration to the terminal window
+				print(f"\ntime:{np.round(t_array[step],2)} - IHF:{IHF[step+1]} - mass: {mass[step]} - mlr:{np.round(mlr_moving_average,2)}")
 
-				# # print the result of this iteration to the terminal window
-				# print(f"\ntime:{np.round(t_array[step],2)} - IHF:{IHF[step+1]} - mass: {mass[step]} - mlr:{np.round(mlr_moving_average,2)}")
+				previous_log = time.time()
 
-				# previous_log = time.time()
-
-				# step += 1
+				step += 1
  
 			# end if ESC is pressed
 			if msvcrt.kbhit():
@@ -214,6 +222,7 @@ with open(name_of_file, "w", newline = "") as handle:
 					writer.writerows([["", "", "", "", "end_test"]])
 					break
 
+		## ---- handle an exception during testing and continue logging the data
 		except Exception as e:
 			print(f"\nInstantaneous error at {np.round(time.time() - start_time, 2)} seconds")
 			print(f"Error:{e}")
