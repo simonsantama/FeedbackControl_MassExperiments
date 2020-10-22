@@ -43,28 +43,28 @@ rm, logger = DataLogger().new_instrument()
 #####
 # REQUEST FROM THE USER THE DESIRED MLR (CONSTANT) AND THE NAME OF THE EXPERIMENT
 #####
-while True:
-	try:
-		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test: "))
-		number_of_test = input("Input number of test in format XXX": )
-		material = input("Input material: ")
+# while True:
+# 	try:
+# 		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test: "))
+# 		number_of_test = input("Input number of test in format XXX": )
+# 		material = input("Input material: ")
 
-		name_of_file = f"N2_{number_of_test}_{material}_{mlr_desired}gm-2s-1.csv"
+# 		name_of_file = f"N2_{number_of_test}_{material}_{mlr_desired}gm-2s-1.csv"
 
-		# confirm the values entered by user
-		confirmation = input(f"\nDesired mlr = {mlr_desired} g/m2s. \nName of file: {name_of_file}.\nProceed?")
-		if not confirmation.lower() in ["yes", "y"]:
-			continue
-		else:
-			break
+# 		# confirm the values entered by user
+# 		confirmation = input(f"\nDesired mlr = {mlr_desired} g/m2s. \nName of file: {name_of_file}.\nProceed?")
+# 		if not confirmation.lower() in ["yes", "y"]:
+# 			continue
+# 		else:
+# 			break
 
-	except Exception as e:
-		print("Invalid file name or mlr")
+# 	except Exception as e:
+# 		print("Invalid file name or mlr")
 
-		# turn off the lamps and close the instrument
-		logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
-		logger.close()
-		rm.close()
+# 		# turn off the lamps and close the instrument
+# 		logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
+# 		logger.close()
+# 		rm.close()
 
 mlr_desired = 2
 name_of_file = "test_output.csv"
@@ -75,7 +75,7 @@ name_of_file = "test_output.csv"
 print("Starting test")
 time.sleep(2)
 
-time_pretesting_period = 30
+time_pretesting_period = 5
 time_logging_period = 0.05
 surface_area = 0.1*0.1
 averaging_window = 50
@@ -83,7 +83,7 @@ irradiation_rate = 0.5
 PID_state = "not_active"
 
 # create arrays large enough to accomodate one hour of data at the pre-set maximum logging frequency
-t_array = np.zeros(3600/time_logging_period)
+t_array = np.zeros(int(3600/time_logging_period))
 IHF = np.zeros_like(t_array)
 mass = np.zeros_like(t_array)
 mlr = np.zeros_like(t_array)
@@ -136,7 +136,7 @@ with open(name_of_file, "w", newline = "") as handle:
 					mlr_moving_average_array[time_step],"", PID_state]])
 
 			previous_log = time.time()
-			step += 1
+			time_step += 1
 
 		# end if ESC is pressed
 		if msvcrt.kbhit():
@@ -147,6 +147,8 @@ with open(name_of_file, "w", newline = "") as handle:
 	# define additional parameters for start of test
 	# ------
 
+	# define ramp for the IHF to follow until the activation of the PID
+	IHF[time_step:] = 3
 
 	# additional parameters
 	bool_start_test = True
@@ -170,19 +172,20 @@ with open(name_of_file, "w", newline = "") as handle:
 				mass[time_step] = load_cell.query_weight()
 				
 				# calculate the instantaneous mlr
-				mlr[step] = - np.round((mass[step] - mass[step-1]) / (t_array[step] - t_array[step-1])/0.1/0.1,1)
+				mlr[time_step] = - np.round((
+					mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/0.1/0.1,1)
 
 				# calculate mlr and force all negative readings to zero
 				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
-				mlr[mlr<0]=0
+				# mlr[mlr<0]=0
 				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()
 				mlr_moving_average_array[time_step] = mlr_moving_average	
 
-				# start with a ramped IHF, and once mlr reaches 0.75*mlr_desired < mlr activate PID
+				# start with a ramped IHF, and once mlr reaches 0.75*mlr_desired, activate PID
 				if PID_state == "not_active":
-					voltage_output_lamps = IHF[time_step+1]
-					if not mlr_moving_average < 0.75*mlr:
-						PID_state == "active"
+					voltage_output = IHF[time_step+1]
+					if mlr_moving_average > 0.75*mlr_desired:
+						PID_state = "active"
 						print("\n-----")
 						print("PID ACTIVE")
 						print("-----\n")
@@ -190,31 +193,33 @@ with open(name_of_file, "w", newline = "") as handle:
 						# set pid parameters
 						previous_pid_time = time.time()
 						last_error = 0
-						last_input = 0
-						error_sum = 0
+						last_input = IHF[time_step]
+						pid_error_sum = 0
 
 				# call PID
-				if PID_state == "active":
-					voltage_output, previous_pid_time, last_error, last_input, pid_error_sum = PID(mlr_moving_average, mlr_desired, 
+				elif PID_state == "active":
+					voltage_output, previous_pid_time, last_error, pid_error_sum = PID(
+						mlr_moving_average, mlr_desired, 
 						previous_pid_time, last_error, last_input, pid_error_sum)
 					IHF[time_step+1] = voltage_output
+					last_input = voltage_output
 
 				# write IHF to the lamps
 				logger.write(':SOURce:VOLTage %G,(%s)' % (voltage_output, '@304'))
 
 				# write data to the csv file
 				if bool_start_test:
-					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "start_test", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], mlr_moving_average, "start_test", PID_state]])
 					bool_start_test = False
 				else:
-					writer.writerows([[t_array[step], mass[step], IHF[step], mlr[step], mlr_moving_average, "", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], mlr_moving_average, "", PID_state]])
 
 				# print the result of this iteration to the terminal window
-				print(f"\ntime:{np.round(t_array[step],2)} - IHF:{IHF[step+1]} - mass: {mass[step]} - mlr:{np.round(mlr_moving_average,2)}")
+				print(f"time:{np.round(t_array[time_step],2)} - IHF:{IHF[time_step+1]} - mass: {mass[time_step]} - mlr:{np.round(mlr_moving_average,2)}\n")
 
 				previous_log = time.time()
 
-				step += 1
+				time_step += 1
  
 			# end if ESC is pressed
 			if msvcrt.kbhit():
@@ -224,7 +229,7 @@ with open(name_of_file, "w", newline = "") as handle:
 
 		## ---- handle an exception during testing and continue logging the data
 		except Exception as e:
-			print(f"\nInstantaneous error at {np.round(time.time() - start_time, 2)} seconds")
+			print(f"\nInstantaneous error at {np.round(time.time() - time_start_logging, 2)} seconds")
 			print(f"Error:{e}")
 			print("\nLogging continues")
 
@@ -232,7 +237,7 @@ with open(name_of_file, "w", newline = "") as handle:
 			# end if ESC is pressed
 			if msvcrt.kbhit():
 				if ord(msvcrt.getch()) == 27:
-					writer.writerows([["", "", "", "", "end_test"]])
+					writer.writerows([["", "", "", "", "","end_test"]])
 					break
 
 
@@ -247,5 +252,5 @@ rm.close()
 
 # finish the experiment
 print("\n\nExperiment finished")
-print(f"Total duration = {np.round((time.time() - start_time)/60,1)} minutes")
+print(f"Total duration = {np.round((time.time() - time_start_logging)/60,1)} minutes")
 
