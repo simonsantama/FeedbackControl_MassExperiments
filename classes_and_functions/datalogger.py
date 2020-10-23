@@ -16,8 +16,11 @@ class DataLogger():
 
     def __init__(self):
         """
-        Initializes the class by checking that connection is possible 
+        Initializes the class by checking that the connection is possible 
         and sending query for the ID number of the logger
+
+        Additionally, it prints to the command window that the connection
+        has been successful
         """
 
         rm = visa.ResourceManager()
@@ -28,7 +31,17 @@ class DataLogger():
 
     def new_instrument(self):
         """
-        Connects to the data logger and returns the instrument
+        Connects to the data logger and returns the instrument as well
+        as the visa Resource Manager (used to close the connection)
+
+        Returns:
+        -------
+        rm: visa.ResourceManager
+            visa resource manager created by the visa library
+
+        my_instrument: rm.open_resource()
+            logger instrument from which it is possible to write commands 
+            and query states.
         """
 
         rm = visa.ResourceManager()
