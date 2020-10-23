@@ -81,11 +81,11 @@ def PID_IHF(current_input, setpoint, previous_time, last_error, last_input, inte
     # compute all the working error variables
     error = setpoint - current_input
     error_sum = error * time_change
-    d_input = (current_input - last_input) / timeChange
+    d_input = (current_input - last_input) / time_change
 
     # compute all the terms
     proportional_term = kp*error
-    integral_term += ki * errorsum
+    integral_term += ki * error_sum
 
     # clamp the integral term so that the PID understand the limits of the lamps
     if integral_term > max_lamp_voltage:
@@ -103,6 +103,6 @@ def PID_IHF(current_input, setpoint, previous_time, last_error, last_input, inte
     if output > max_lamp_voltage:
         output = max_lamp_voltage
     elif output < min_lamp_voltage:
-        output = min_lamp_voltage
+    	output = min_lamp_voltage
 
     return output, now, error, proportional_term, integral_term, derivative_term
