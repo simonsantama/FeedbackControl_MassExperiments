@@ -1,6 +1,7 @@
 """
 Class use to connect to the FPA's load cell and query the mass
 
+Uses the Mettler Toledo Standard Interface Command Set (MT-SICS)
 """
 
 import socket
@@ -45,7 +46,7 @@ class MettlerToledoDevice(object):
             s.sendall(request)
             
             response = []
-            # keep calling receive until the end of line symbols are received
+            # keep calling receive until the end of line symbols ("\r or \n") are received
             response = []
             while True:
                 part_response = s.recv(1024).decode()
@@ -89,12 +90,11 @@ class MettlerToledoDevice(object):
                 print("Couldn't connect to the load cell when quering weight")
                 print(f"Exception: {e}")
 
-
             # send stable weight or, if timeout (in ms), then send dynamic weight
             request = self._fomat_request("SC 420")
             s.sendall(request)
 
-            # keep calling receive until the end of line symbols are received
+            # keep calling receive until the end of line symbols ("\r or \n") are received
             response = []
             while True:
                 part_response = s.recv(1024).decode()
@@ -106,7 +106,12 @@ class MettlerToledoDevice(object):
             # format the reponse
             response_str = str(response).strip('[]')
             parsed_response = re.findall(r'\b\d+\b', response_str)
-            if len(parsed_response) == 2:
+
+            # parse the weight data. In reality, given the sample holder and the 
+            # use of the aluminium block, len(parsed_response) is probably 3
+            if len(parsed_response) == 1:
+                weight = float(parsed_response[0]/100)
+            elif len(parsed_response) == 2:
                 weight = float(parsed_response[0]) + float(parsed_response[1])/100
             elif len(parsed_response) == 3:
                 weight = float(parsed_response[0])*1000 + float(parsed_response[1]) + float(parsed_response[2])/100
