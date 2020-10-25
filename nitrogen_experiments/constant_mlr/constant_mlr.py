@@ -45,36 +45,39 @@ rm, logger = DataLogger().new_instrument()
 #####
 # REQUEST FROM THE USER THE DESIRED MLR (CONSTANT) AND THE NAME OF THE EXPERIMENT
 #####
-# while True:
-# 	try:
-# 		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test: "))
-# 		number_of_test = input("Input number of test in format XXX": )
-# 		material = input("Input material: ")
+while True:
+	try:
+		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test: "))
+		number_of_test = input("Input number of test in format XXX": )
+		material = input("Input material: ").lower()
 
-# 		name_of_file = f"N2_{number_of_test}_{material}_{mlr_desired}gm-2s-1.csv"
+		name_of_file = f"N2_{number_of_test}_{material}_{mlr_desired}gm-2s-1.csv"
 
-# 		# confirm the values entered by user
-# 		confirmation = input(f"\nDesired mlr = {mlr_desired} g/m2s. \nName of file: {name_of_file}.\nProceed?")
-# 		if not confirmation.lower() in ["yes", "y"]:
-# 			continue
-# 		else:
-# 			break
+		# confirm the values entered by user
+		confirmation = input(f"\nDesired mlr = {mlr_desired} g/m2s. \nName of file: {name_of_file}.\nProceed?")
+		if not confirmation.lower() in ["yes", "y"]:
+			continue
+		else:
+			break
 
-# 	except Exception as e:
-# 		print("Invalid file name or mlr")
+	except Exception as e:
+		print("Invalid file name or mlr")
 
-# 		# turn off the lamps and close the instrument
-# 		logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
-# 		logger.close()
-# 		rm.close()
+		# turn off the lamps and close the instrument
+		logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
+		logger.close()
+		rm.close()
+		sys.exit()
 
-mlr_desired = 10
-name_of_file = "test_output.csv"
 name_of_folder = name_of_file.split(".")[0]
 full_name_of_file = os.path.join(name_of_folder, name_of_file)
 # create folder with the name of the file
 if not os.path.exists(name_of_folder):
 	os.mkdir(name_of_folder)
+# do not overwrite the file
+else:
+	sys.exit()
+
 
 
 #####
