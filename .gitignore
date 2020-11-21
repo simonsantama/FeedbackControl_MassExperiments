@@ -4,3 +4,4 @@
 *.pdf
 *.png
 *.xlsx
+!nitrogen_experiments/N2_test_summary.xlsx
