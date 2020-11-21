@@ -64,6 +64,12 @@ l = axes0[1].plot([],[], color = "maroon", alpha = 0.75, linewidth = 1.5,
 axes0[1].legend(fancybox = True, loc = "upper left", fontsize = fontsize_legend)
 
 # add legend for PID coefficients plot in figure 1
+list_plots = []
+for i in range(3):
+	l = ax1.plot([],[], color = ["maroon", "dodgerblue", "black"][i], linewidth = 1,
+		linestyle = ["-", "--", ":"][i], 
+		label = ["Proportional", "Integral", "Derivative"][i])
+ax1.legend(fancybox = True, loc = "upper right", fontsize = fontsize_legend)
 
 
 
