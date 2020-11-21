@@ -15,6 +15,21 @@ import os
 import time
 
 #####
+# DETERMINE WHERE THE DATA FOR THE MOST RECENT EXPERIMENT IS
+#####
+
+# find the most recently created folder
+path = "C:\\Users\\Firelab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\nitrogen_experiments"
+all_folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
+
+folder_creation_time = 0
+for folder in all_folders:
+	ts = os.path.getmtime(os.path.join(path, folder))
+	if ts > folder_creation_time:
+		latest_folder = folder
+		folder_creation_time = ts
+
+#####
 # CREATE AND FORMAT FIGURES
 #####
 
@@ -26,20 +41,33 @@ figure_size = (18,8)
 
 
 # create figures 
-plt.ion()
-fig0, ax0 = plt.subplots(2,1, constrained_layout = True)
+# plt.ion()
+fig0, axes0 = plt.subplots(2,1, constrained_layout = True)
 fig1, ax1 = plt.subplots(1,1, constrained_layout = True)
 
-# # format the plots
-# for a, ax in enumerate([ax0, ax1]):
-# 	ax.set_xlabel("Time [s]", fontsize = fontsize_labels)
-# 	ax.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
-# 	ax.set_title(["IHF and averaged MLR", "Contribution of PID coefficients"][a], fontsize = fontsize_labels + 1)
-# 	ax.set_ylim([[-1,7],[0,2]][a])
-# ax1.set_ylabel("PID_term/IHF", fontsize = fontsize_labels)	
 
-# # add plots
-# list_plots = []
+# format the plots
+for a,ax in enumerate(axes0):
+	ax.set_ylabel(["IHF [kW]", "MLR [g/m2s]"][a], fontsize = fontsize_labels)
+	ax.set_xlabel("Time [s]", fontsize = fontsize_labels)
+	ax.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
+ax1.set_ylabel("PID coefficients [-]", fontsize = fontsize_labels)
+ax1.set_xlabel("Time [s]", fontsize = fontsize_labels)
+ax1.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
+
+
+# add legend for mlr plot in figure 0
+s = axes0[1].scatter([],[], color = "gray", alpha = 0.75, marker = "o", 
+	label = "mlr")
+l = axes0[1].plot([],[], color = "maroon", alpha = 0.75, linewidth = 1.5,
+	label = "mlr_moving_average")
+axes0[1].legend(fancybox = True, loc = "upper left", fontsize = fontsize_legend)
+
+# add legend for PID coefficients plot in figure 1
+
+
+
+
 # for i in range(2):
 # 	l = ax0.plot([], [], color = ["maroon", "dodgerblue"][i], 
 # 		linestyle = "", marker = ["o", "d"][i], markersize = 5, label = ["IHF [volts]", "MLR [g/m2s]"][i])
@@ -57,20 +85,6 @@ fig1, ax1 = plt.subplots(1,1, constrained_layout = True)
 # plt.pause(1)
 
 
-# #####
-# # DETERMINE WHERE THE DATA FOR THE MOST RECENT EXPERIMENT IS
-# #####
-
-# # find the most recently created folder
-# path = "C:\\Users\\Firelab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\nitrogen_experiments\\constant_mlr"
-# all_folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
-
-# folder_creation_time = 0
-# for folder in all_folders:
-# 	ts = os.path.getmtime(os.path.join(path, folder))
-# 	if ts > folder_creation_time:
-# 		latest_folder = folder
-# 		folder_creation_time = ts
 
 # #####
 # # KEEP UPLOADING, READING AND PLOTTING THE DATA WHILE THE EXPERIMENT CONTINUES
