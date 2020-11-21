@@ -13,6 +13,7 @@ import numpy as np
 import pickle
 import os
 import time
+import sys
 
 #####
 # DETERMINE WHERE THE DATA FOR THE MOST RECENT EXPERIMENT IS
@@ -41,7 +42,7 @@ figure_size = (18,8)
 
 
 # create figures 
-# plt.ion()
+plt.ion()
 fig0, axes0 = plt.subplots(2,1, constrained_layout = True)
 fig1, ax1 = plt.subplots(1,1, constrained_layout = True)
 
@@ -73,63 +74,60 @@ ax1.legend(fancybox = True, loc = "upper right", fontsize = fontsize_legend)
 
 
 
+#####
+# KEEP UPLOADING, READING AND PLOTTING THE DATA WHILE THE EXPERIMENT CONTINUES
+#####
 
-# for i in range(2):
-# 	l = ax0.plot([], [], color = ["maroon", "dodgerblue"][i], 
-# 		linestyle = "", marker = ["o", "d"][i], markersize = 5, label = ["IHF [volts]", "MLR [g/m2s]"][i])
-# 	list_plots.append(l)
+latest_folder_path = os.path.join(path, latest_folder)
+for file in os.listdir(latest_folder_path):
+	if ".pkl" in file:
+		pickle_file = file
 
-# for i in range(3):
-# 	l = ax1.plot([], [], color = ["maroon", "dodgerblue", "forestgreen"][i], 
-# 		linestyle = "", marker = ["o", "d", "+"][i], markersize = 5, 
-# 		label = ["Proportional term", "Integral term", "Derivative term"][i])
-# 	list_plots.append(l)
+pickle_file_path = os.path.join(latest_folder_path, pickle_file)
 
-# # add legends
-# for ax in [ax0,ax1]:
-# 	ax.legend(fancybox = True, loc = "upper left", fontsize = fontsize_legend)
-# plt.pause(1)
+# do an infinite loop where it reads the data and plots it to both figures
+while True:
 
+	try:
+		with open(pickle_file_path, "rb") as handle:
+			all_data = pickle.load(handle)
+			
+			# extract the data
+			time_array = all_data["time"]
+			IHF = all_data["IHF"]
+			mlr = all_data["mlr"]
+			mlr_moving_average = all_data["mlr_moving_average"]
+			time_step = all_data["time_step"]
 
+			time.sleep(1)
+			plt.pause(0.001)
+# # 			print(all_data.keys())
+# # 			time.sleep(5)
+# # 			time_array = all_data["t"]
+# # 			IHF = all_data["IHF"]
+# # 			mlr = IHF = all_data["mlr"]
+# # 			time_step = all_data["time_step"]
 
-# #####
-# # KEEP UPLOADING, READING AND PLOTTING THE DATA WHILE THE EXPERIMENT CONTINUES
-# #####
+# # 			plotting_list = [IHF, mlr, IHF, mlr]
 
-# pickle_file_name = f"{latest_folder}.pkl"
-
-# # do an infinite loop where it reads the data and plots it to both figures
-# while True:
-
-# 	try:
-# 		with open(os.path.join(path, folder, pickle_file_name), "rb") as handle:
-# 			all_data = pickle.load(handle)
-# 			print(all_data.keys())
-# 			time.sleep(5)
-# 			time_array = all_data["t"]
-# 			IHF = all_data["IHF"]
-# 			mlr = IHF = all_data["mlr"]
-# 			time_step = all_data["time_step"]
-
-# 			plotting_list = [IHF, mlr, IHF, mlr]
-
-# 			for i,l in enumerate(list_plots):
-# 				l.set_data(time_array[:time_step], l[:time_step])
-# 				plt.pause(0.001)
+# # 			for i,l in enumerate(list_plots):
+# # 				l.set_data(time_array[:time_step], l[:time_step])
+# # 				plt.pause(0.001)
 
 
 
-# 	except Exception as e:
-# 		print(f"Error when loading pickle {e}")
+	except Exception as e:
+		print(f"\nError when loading pickle\n")
+		print(e)
 
-# 	if msvcrt.kbhit():
+	if msvcrt.kbhit():
 # 	    if ord(msvcrt.getch()) == 27:
 # 	    	folder_path = os.path.join(path, latest_folder)
 # 	    	figure0_name = f"{folder_path}/IHF_MLR.pdf"
 # 	    	figure1_name = f"{folder_path}/PID_terms.pdf"
 # 	    	fig0.savefig(f"{figure0_name}")
 # 	    	fig1.savefig(f"{figure1_name}")
-# 	    	break
+	    	sys.exit(0)
 
 
 # while True:
@@ -160,61 +158,3 @@ ax1.legend(fancybox = True, loc = "upper right", fontsize = fontsize_legend)
 
 
 plt.show()
-
-
-
-
-
-# # -- create plots and format them
-# plt.ion()
-# fig, axes = plt.subplots(1, 4, figsize=(12, 12), sharex=True, sharey=True)
-# # fig.canvas.manager.full_screen_toggle()
-# axes[0].set_ylabel("Mass [g]", fontsize=16)
-# axes[0].set_xlim([0, 100])
-# axes[0].set_ylim([-500, 500])
-# axes[0].set_yticks([-500, -250, 0, 250, 500])
-# for ax in axes:
-#     ax.set_xlabel("Time [s]", fontsize=16)
-# # column titles
-# for a, ax in enumerate(axes):
-#     ax.set_title(["ACM", "ACM tray", "Insulation tray", "Insulation"][a], fontsize=20)
-# # empty plots with data that updates in time
-# list_plots = []
-# for a, ax in enumerate(axes):
-#     l, = ax.plot(plotting_time, plotting_masses[a], linestyle=None, marker="o", markersize=3, markerfacecolor="None", markeredgecolor="r")
-#     list_plots.append(l)
-# # grid
-# for ax in axes:
-#     ax.grid(True, color="gainsboro", linestyle="--", linewidth=0.75)
-# plt.pause(0.5)
-
-# # read csv file and update the plot
-# while True:
-
-#     try:
-#         with open(filename, 'rb') as handle:
-#             all_data = pickle.load(handle)
-
-#             time_max = math.ceil(all_data["time"][-1] / 100) * 100
-#             axes[0].set_xlim([0, time_max])
-
-#             # parse data from the pickle
-#             plotting_time = all_data["time"]
-#             for i, key in enumerate(all_data.keys()):
-#                 if key == "time":
-#                     continue
-#                 else:
-#                     plotting_masses[i - 1] = np.array(all_data[key])
-
-#             # update mass plots
-#             for i, data in enumerate(plotting_masses):
-#                 list_plots[i].set_data(plotting_time, plotting_masses[i] - plotting_masses[i][0])
-#                 plt.pause(0.0001)
-
-#     except Exception as e:
-#         print(f"Error when loading pickle: {e}")
-
-#     if msvcrt.kbhit():
-#         if ord(msvcrt.getch()) == 27:
-#             plt.savefig(f"{filename.split('.')[0]}_testingplot.png")
-#             break
