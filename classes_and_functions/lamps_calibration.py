@@ -18,9 +18,10 @@ import pickle
 
 # add path to import functions and classes (absolute path on the FPA's computer)
 sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\classes_and_functions")
-# from datalogger import DataLogger
+from datalogger import DataLogger
 
-# create folder to store the calibration results of this particular 
+# create folder to store the calibration results of this particular day
+
 
 
 #####
@@ -29,15 +30,15 @@ sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExp
 
 # create instance of the data logger and check connection
 print("\nConnection to data logger")
-# rm, logger = DataLogger().new_instrument()
+rm, logger = DataLogger().new_instrument()
 
 
 #####
 # CALIBRATE THE LAMPS. FOLLOW JUAN'S METHOD. USE STEPS OF 0.2 VOLTS
 #####
 
-for voltage_output_lamps in np.arange(0,5.2,0.2):
-	print(voltage_output_lamps)
+# for voltage_output_lamps in np.arange(0,5.2,0.2):
+# 	print(voltage_output_lamps)
 
 
 	# # write IHF to the lamps

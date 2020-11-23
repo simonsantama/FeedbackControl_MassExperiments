@@ -14,8 +14,6 @@ import pickle
 import os
 import time
 import sys
-# for debugging
-# np.set_printoptions(threshold=sys.maxsize)
 
 #####
 # DETERMINE WHERE THE DATA FOR THE MOST RECENT EXPERIMENT IS
@@ -55,12 +53,16 @@ for a,ax in enumerate(axes0):
 	ax.set_xlabel("Time [s]", fontsize = fontsize_labels)
 	ax.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
 	ax.set_ylim([[-0.5,5.5],[-0.5,12.5]][a])
-	ax.set_yticks([np.linspace(0,5,11), np.linspace(0,12,7)][a])
+	ax.set_yticks([np.linspace(0,5,6), np.linspace(0,12,13)][a])
 	ax.set_xlim([0,900])
 	ax.set_xticks(np.linspace(0,900,10))
 ax1.set_ylabel("PID terms [-]", fontsize = fontsize_labels)
 ax1.set_xlabel("Time [s]", fontsize = fontsize_labels)
 ax1.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
+ax1.set_ylim([-0.5,5.5])
+ax1.set_yticks(np.linspace(0,5,11))
+ax1.set_xlim([0,900])
+ax1.set_xticks(np.linspace(0,900,10))
 
 # add lines and legend for plots in figure 0
 ihf_line, = axes0[0].plot([],[], color = "maroon", alpha = 0.75, linewidth = 2)
@@ -86,15 +88,22 @@ ax1.legend(fancybox = True, loc = "upper right", fontsize = fontsize_legend)
 #####
 
 latest_folder_path = os.path.join(path, latest_folder)
-for file in os.listdir(latest_folder_path):
-	if ".pkl" in file:
-		pickle_file = file
+bool_filecreation = False
+# main file takes some time to create the pickle
+while not bool_filecreation:
+	try:
+		for file in os.listdir(latest_folder_path):
+			if ".pkl" in file:
+				pickle_file = file
 
-pickle_file_path = os.path.join(latest_folder_path, pickle_file)
-print(f"Latest file is: {pickle_file.split('.')[0]}")
+		pickle_file_path = os.path.join(latest_folder_path, pickle_file)
+		print(f"Latest file is: {pickle_file.split('.')[0]}")
+		bool_filecreation = True
+	except:
+		print("Pickle file not created yet")
+		time.sleep(10)
 
 # do an infinite loop where it reads the data and plots it to both figures
-i = 0
 while True:
 
 	try:
@@ -107,7 +116,11 @@ while True:
 			mlr = all_data["mlr"]
 			mlr_moving_average = all_data["mlr_moving_average"]
 			time_step = all_data["time_step"]
+			PID_prop = all_data["PID_proportional"]
+			PID_integral = all_data["PID_integral"]
+			PID_dev = all_data["PID_derivative"]
 
+			# modify plots in figure 0
 			ihf_line.set_data([time_array[:time_step]],
 				[ihf[:time_step]])
 			mlr_line.set_data(time_array[:time_step],
@@ -115,20 +128,28 @@ while True:
 			mlr_movingaverage_line.set_data(time_array[:time_step],
 				mlr_moving_average[:time_step])
 
-			print(time_step, ihf[time_step], mlr[time_step])
+			# modify plots in figure 1
+			for l, line in enumerate(list_PIDterms_plots):
+				line.set_data(time_array[:time_step],
+					[PID_prop, PID_integral, PID_dev][l][:time_step])
+
+			# pause the figure
 			plt.pause(0.5)
 
 
 
 	except Exception as e:
-		print(f"\nError when loading pickle or plotting data\n")
-		print(e)
+		# print(f"\nError when loading pickle or plotting data\n")
+		# print(e)
+		time.sleep(0.5)
+
 
 	if msvcrt.kbhit():
 	    if ord(msvcrt.getch()) == 27:
 	    	# exit and save figures if ESC is pressed
 	    	folder_path = os.path.join(path, latest_folder)
 	    	for f, figure in enumerate([fig0, fig1]):
-	    		figure.savefig(f'{folder_path}/{["IHF_MLR.pdf",
-	    			"PID_terms.pdf"][f]}')
+	    		figure.savefig(f'{folder_path}/{["IHF_MLR.pdf","PID_terms.pdf"][f]}')
+	    	print("Exiting plotting script")
+	    	sys.exit(0)
 plt.show()
