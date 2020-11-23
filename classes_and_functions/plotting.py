@@ -14,6 +14,8 @@ import pickle
 import os
 import time
 import sys
+# for debugging
+# np.set_printoptions(threshold=sys.maxsize)
 
 #####
 # DETERMINE WHERE THE DATA FOR THE MOST RECENT EXPERIMENT IS
@@ -52,26 +54,31 @@ for a,ax in enumerate(axes0):
 	ax.set_ylabel(["IHF [kW]", "MLR [g/m2s]"][a], fontsize = fontsize_labels)
 	ax.set_xlabel("Time [s]", fontsize = fontsize_labels)
 	ax.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
-ax1.set_ylabel("PID coefficients [-]", fontsize = fontsize_labels)
+	ax.set_ylim([[-0.5,5.5],[-0.5,12.5]][a])
+	ax.set_yticks([np.linspace(0,5,11), np.linspace(0,12,7)][a])
+	ax.set_xlim([0,900])
+	ax.set_xticks(np.linspace(0,900,10))
+ax1.set_ylabel("PID terms [-]", fontsize = fontsize_labels)
 ax1.set_xlabel("Time [s]", fontsize = fontsize_labels)
 ax1.yaxis.grid(True, linewidth = linewidth_grid, linestyle = "--", color = "gainsboro")
 
-
-# add legend for mlr plot in figure 0
-s = axes0[1].scatter([],[], color = "gray", alpha = 0.75, marker = "o", 
-	label = "mlr")
-l = axes0[1].plot([],[], color = "maroon", alpha = 0.75, linewidth = 1.5,
+# add lines and legend for plots in figure 0
+ihf_line, = axes0[0].plot([],[], color = "maroon", alpha = 0.75, linewidth = 2)
+mlr_line, = axes0[1].plot([],[], color = "gray", alpha = 0.75, marker = "o", 
+	label = "mlr", linestyle = "")
+mlr_movingaverage_line, = axes0[1].plot([],[], color = "maroon", alpha = 0.75, 
+	linewidth = 2,
 	label = "mlr_moving_average")
 axes0[1].legend(fancybox = True, loc = "upper left", fontsize = fontsize_legend)
 
 # add legend for PID coefficients plot in figure 1
-list_plots = []
+list_PIDterms_plots = []
 for i in range(3):
-	l = ax1.plot([],[], color = ["maroon", "dodgerblue", "black"][i], linewidth = 1,
+	l, = ax1.plot([],[], color = ["maroon", "dodgerblue", "black"][i], linewidth = 1,
 		linestyle = ["-", "--", ":"][i], 
 		label = ["Proportional", "Integral", "Derivative"][i])
+	list_PIDterms_plots.append(l)
 ax1.legend(fancybox = True, loc = "upper right", fontsize = fontsize_legend)
-
 
 
 #####
@@ -84,8 +91,10 @@ for file in os.listdir(latest_folder_path):
 		pickle_file = file
 
 pickle_file_path = os.path.join(latest_folder_path, pickle_file)
+print(f"Latest file is: {pickle_file.split('.')[0]}")
 
 # do an infinite loop where it reads the data and plots it to both figures
+i = 0
 while True:
 
 	try:
@@ -94,67 +103,32 @@ while True:
 			
 			# extract the data
 			time_array = all_data["time"]
-			IHF = all_data["IHF"]
+			ihf = all_data["IHF"]
 			mlr = all_data["mlr"]
 			mlr_moving_average = all_data["mlr_moving_average"]
 			time_step = all_data["time_step"]
 
-			time.sleep(1)
-			plt.pause(0.001)
-# # 			print(all_data.keys())
-# # 			time.sleep(5)
-# # 			time_array = all_data["t"]
-# # 			IHF = all_data["IHF"]
-# # 			mlr = IHF = all_data["mlr"]
-# # 			time_step = all_data["time_step"]
+			ihf_line.set_data([time_array[:time_step]],
+				[ihf[:time_step]])
+			mlr_line.set_data(time_array[:time_step],
+				mlr[:time_step])
+			mlr_movingaverage_line.set_data(time_array[:time_step],
+				mlr_moving_average[:time_step])
 
-# # 			plotting_list = [IHF, mlr, IHF, mlr]
-
-# # 			for i,l in enumerate(list_plots):
-# # 				l.set_data(time_array[:time_step], l[:time_step])
-# # 				plt.pause(0.001)
+			print(time_step, ihf[time_step], mlr[time_step])
+			plt.pause(0.5)
 
 
 
 	except Exception as e:
-		print(f"\nError when loading pickle\n")
+		print(f"\nError when loading pickle or plotting data\n")
 		print(e)
 
 	if msvcrt.kbhit():
-# 	    if ord(msvcrt.getch()) == 27:
-# 	    	folder_path = os.path.join(path, latest_folder)
-# 	    	figure0_name = f"{folder_path}/IHF_MLR.pdf"
-# 	    	figure1_name = f"{folder_path}/PID_terms.pdf"
-# 	    	fig0.savefig(f"{figure0_name}")
-# 	    	fig1.savefig(f"{figure1_name}")
-	    	sys.exit(0)
-
-
-# while True:
-
-#     try:
-#         with open(filename, 'rb') as handle:
-#             all_data = pickle.load(handle)
-
-#             time_max = math.ceil(all_data["time"][-1] / 100) * 100
-#             axes[0].set_xlim([0, time_max])
-
-#             # parse data from the pickle
-#             plotting_time = all_data["time"]
-#             for i, key in enumerate(all_data.keys()):
-#                 if key == "time":
-#                     continue
-#                 else:
-#                     plotting_masses[i - 1] = np.array(all_data[key])
-
-#             # update mass plots
-#             for i, data in enumerate(plotting_masses):
-#                 list_plots[i].set_data(plotting_time, plotting_masses[i] - plotting_masses[i][0])
-#                 plt.pause(0.0001)
-
-#     except Exception as e:
-#         print(f"Error when loading pickle: {e}")
-
-
-
+	    if ord(msvcrt.getch()) == 27:
+	    	# exit and save figures if ESC is pressed
+	    	folder_path = os.path.join(path, latest_folder)
+	    	for f, figure in enumerate([fig0, fig1]):
+	    		figure.savefig(f'{folder_path}/{["IHF_MLR.pdf",
+	    			"PID_terms.pdf"][f]}')
 plt.show()

@@ -171,6 +171,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 
 			previous_log = time.time()
+			time_step_lastpretest = time_step
 			time_step += 1
 
 		# end if ESC is pressed
@@ -220,7 +221,8 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 				# start with a ramped IHF, and once mlr reaches 0.8*mlr_desired, activate PID
 				if PID_state == "not_active":
-					IHF[time_step+1] = (t_array[time_step] - t_array[0]) * irradiation_rate_volts
+					IHF[time_step+1] = (t_array[time_step] - 
+						t_array[time_step_lastpretest]) * irradiation_rate_volts
 					voltage_output = IHF[time_step+1]
 
 					if voltage_output > max_lamp_voltage:
