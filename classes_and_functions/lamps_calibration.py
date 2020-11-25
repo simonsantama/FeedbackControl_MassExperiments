@@ -3,10 +3,6 @@ Algorithm used to calibrate the lamps every morning.
 
 """
 
-#####
-# IMPORT LIBRARIES, CLASSES AND FUNCTIONS
-#####
-
 # libraries
 import numpy as np
 import sys
@@ -15,13 +11,16 @@ import msvcrt
 import csv
 import os
 import pickle
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+import pandas as pd
+from pandas import ExcelWriter
+
 
 # add path to import functions and classes (absolute path on the FPA's computer)
 sys.path.insert(1, r"C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\classes_and_functions")
 from datalogger import DataLogger
-
-# create folder to store the calibration results of this particular day
-
 
 
 #####
@@ -38,35 +37,74 @@ rm, logger = DataLogger().new_instrument()
 #####
 
 # define constants
-
+lamp_voltage_limit = 4.5
 
 # define arrays used for polynomial fitting
-hf_gauge_factor = 0.1017          # mv/kW/m2
-nmbr_readings_pervoltage = 20
-nmbr_voltages = np.linspace(0,4.75,20)
-all_output_voltages = np.zeros(nmbr_readings_pervoltage*len(nmbr_voltages))
+hf_gauge_factor = 0.0001017          # V/kW/m2
+nmbr_readings_pervoltage = 1
+output_voltages = np.linspace(0,lamp_voltage_limit,20)
+all_output_voltages = np.zeros(nmbr_readings_pervoltage*len(output_voltages)*2)
 all_input_voltages = np.zeros_like(all_output_voltages)
 all_input_kWm2 = np.zeros_like(all_output_voltages)
 
-t = 0
 
+t = 0
+time_start_logging = time.time()
+
+print("---")
+print("INCREASING")
+print("---\n")
 # increasing the heat flux in steps
-for v, output_voltage in enumerate(nmbr_voltages):
+for output_voltage in output_voltages:
+	continue
 
 	# protect the lamps
-	if output_voltage > 4.75:
-		output_voltage = 4.75
+	if output_voltage > lamp_voltage_limit:
+		output_voltage = lamp_voltage_limit
 
 	# send voltage to lamps
-	logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
+	print(f"\n\n ---- Voltage output to the lamps: {np.round(output_voltage,4)} V\n")
+	logger.write(':SOURce:VOLTage %G,(%s)' % (output_voltage, '@304'))
 
-	# wait 5 seconds for the lamps to estabilise
-	time.sleep(5)
-	print(f"\n\n ---- Voltage output to the lamps: {output_voltage} V\n")
+	# wait 7.5 seconds for the lamps to estabilise
+	time.sleep(10)
+	
 
 	for nmr_readings in range(nmbr_readings_pervoltage):
 
-		print(t)
+		# read voltage from the  hf gauge
+		input_voltage = float(logger.query(':MEASure:VOLTage:DC? (%s)' % ('@110')))
+		print(f"Voltage readings from the hf gauge: {np.round(input_voltage*1000,6)} mV")
+		print(f"Corresponding heat flux: {np.round(input_voltage/hf_gauge_factor,3)} kW/m2\n")
+
+		# save the data
+		all_output_voltages[t] = output_voltage
+		all_input_voltages[t] = input_voltage
+		all_input_kWm2[t] = input_voltage/hf_gauge_factor
+
+		# update the counter
+		t += 1
+
+
+# decreasing the heat flux in steps
+print("---")
+print("DECREASING")
+print("---\n")
+
+for output_voltage in np.flip(output_voltages):
+	continue
+
+	# protect the lamps
+	if output_voltage > lamp_voltage_limit:
+		output_voltage = lamp_voltage_limit
+
+	print(f"\n\n ---- Voltage output to the lamps: {np.round(output_voltage,4)} V\n")
+	logger.write(':SOURce:VOLTage %G,(%s)' % (output_voltage, '@304'))
+
+	# wait 7.5 seconds for the lamps to estabilise
+	time.sleep(10)
+
+	for nmr_readings in range(nmbr_readings_pervoltage):
 
 		# read voltage from the  hf gauge
 		input_voltage = float(logger.query(':MEASure:VOLTage:DC? (%s)' % ('@110')))
@@ -76,19 +114,99 @@ for v, output_voltage in enumerate(nmbr_voltages):
 		# save the data
 		all_output_voltages[t] = output_voltage
 		all_input_voltages[t] = input_voltage
-		all_input_kWm2 = input_voltage/hf_gauge_factor
+		all_input_kWm2[t] = input_voltage/hf_gauge_factor
 
 		# update the counter
 		t += 1
 
-# decreasing the heat flux in steps
+
+# condense all data into data frames
+all_data = pd.DataFrame()
+all_data.loc[:, "input_voltage_fromgauge"] = all_input_voltages
+all_data.loc[:, "heat_flux_kWm-2"] = all_input_kWm2
+all_data.loc[:, "output_voltage_tolamps"] = all_output_voltages
 
 
-# save all the data into an excel file
+# polynomial fit (third degree) for heat flux gauge
+poly_degree = 3
+# x = all_data.loc[:, "heat_flux_kWm-2"]
+# y = all_data.loc[:, "output_voltage_tolamps"]
+# coeff_heatflux_to_voltage = np.polyfit(x,y, poly_degree)
+coeff_heatflux_to_voltage = np.linspace(0,3,4)
 
 
+coeff_data = pd.DataFrame()
+coeff_data.loc[:, "coefficients"] = coeff_heatflux_to_voltage
+coeff_data.loc[0, "Notes"] = "Polyfit. a^n * coeff[0] + ..."
+
+all_data.loc[:, "output_voltage_tolamps_polyfit"] = np.polyval(
+	coeff_heatflux_to_voltage, all_data.loc[:, "heat_flux_kWm-2"])
 
 
-# run a couple of test heat flux curves to evaluate performance of the lamps
-bool_extra_linear = input("\nComplete test of lamps with  linear HF?").lower()
-if bool_extra_linear
+# additional curves to check response of the lamps
+bool_additional_curves = input("Assess behaviour with linear curves?\n").lower()
+additional_curves = pd.DataFrame()
+constant_heat_fluxes = [15,30,45]
+linear_heat_fluxes = [0.05]
+
+# run constant, linear and quadratic curves for five minutes to investigate response
+if bool_additional_curves in ["y", "yes"]:
+	additional_curves.loc[:, "time"] = np.linspace(0,300,301)
+
+	# create heat flux arrays
+	for hf, heatflux in enumerate(constant_heat_fluxes):
+		additional_curves.loc[:, f"desired_{heatflux}_kWm-2"] = heatflux
+		additional_curves.loc[:, f"desired_{heatflux}_volts"] = np.polyval(
+			coeff_heatflux_to_voltage, 
+			additional_curves.loc[:, f"desired_{heatflux}_kWm-2"].values)
+
+		# run the heat flux curve and measure actual heat flux
+		start = time.time()
+		current = time.time()
+		t = 0
+		while current - start < 300:
+			if np.floor(current - start) > t:
+				print(time.time())
+			else:
+				pass
+			t += 1
+			
+		
+
+
+# save data into calibration data file
+address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\calibration_data"
+name_file = f"{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.xlsx"
+address_file = os.path.join(address_folder, name_file)
+
+with ExcelWriter(address_file) as writer:
+	all_data.to_excel(writer, sheet_name = "calibration_data", index = False)
+	coeff_data.to_excel(writer, sheet_name = "polynomial_fit")
+	additional_curves.to_excel(writer, sheet_name = "linear_curves", index = False)
+# plot
+fig, ax = plt.subplots(1,1,figsize = (12,8))
+ax.set_xlabel("Heat Flux [kW/m2]")
+ax.set_ylabel("Voltage to lamps [VDC]")
+ax.scatter(all_data.loc[:, "heat_flux_kWm-2"],
+	all_data.loc[:, "output_voltage_tolamps"],
+	color = "dodgerblue", alpha = 0.5)
+ax.plot(all_data.loc[:, "heat_flux_kWm-2"],
+	all_data.loc[:, "output_voltage_tolamps_polyfit"],
+	color = "maroon",
+	linewidth = 2)
+ax.set_xlim([0,70])
+ax.set_xticks(np.linspace(0,70,8))
+ax.set_ylim([0,5])
+ax.set_yticks(np.linspace(0,5,6))
+ax.grid(True, linewidth = 0.7, linestyle = "--", color = "gainsboro", 
+	alpha = 0.75)
+address_plot = f"{address_file.split('.xlsx')[0]}.pdf"
+plt.savefig(address_plot)
+
+# finish the calibration
+logger.write(':SOURce:VOLTage %G,(%s)' % (0.0, '@304'))
+logger.close()
+rm.close()
+
+print("\n\nCalibration finished")
+print(f"Total duration = {np.round((time.time() - time_start_logging)/60,1)} minutes")
