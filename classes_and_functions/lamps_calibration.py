@@ -41,7 +41,7 @@ lamp_voltage_limit = 4.5
 
 # define arrays used for polynomial fitting
 hf_gauge_factor = 0.0001017          # V/kW/m2
-nmbr_readings_pervoltage = 1
+nmbr_readings_pervoltage = 20
 output_voltages = np.linspace(0,lamp_voltage_limit,20)
 all_output_voltages = np.zeros(nmbr_readings_pervoltage*len(output_voltages)*2)
 all_input_voltages = np.zeros_like(all_output_voltages)
@@ -51,12 +51,11 @@ all_input_kWm2 = np.zeros_like(all_output_voltages)
 t = 0
 time_start_logging = time.time()
 
-print("---")
+print("\n\n---")
 print("INCREASING")
-print("---\n")
+print("---\n\n")
 # increasing the heat flux in steps
 for output_voltage in output_voltages:
-	continue
 
 	# protect the lamps
 	if output_voltage > lamp_voltage_limit:
@@ -87,12 +86,11 @@ for output_voltage in output_voltages:
 
 
 # decreasing the heat flux in steps
-print("---")
+print("\n\n---")
 print("DECREASING")
-print("---\n")
+print("---\n\n")
 
 for output_voltage in np.flip(output_voltages):
-	continue
 
 	# protect the lamps
 	if output_voltage > lamp_voltage_limit:
@@ -129,10 +127,9 @@ all_data.loc[:, "output_voltage_tolamps"] = all_output_voltages
 
 # polynomial fit (third degree) for heat flux gauge
 poly_degree = 3
-# x = all_data.loc[:, "heat_flux_kWm-2"]
-# y = all_data.loc[:, "output_voltage_tolamps"]
-# coeff_heatflux_to_voltage = np.polyfit(x,y, poly_degree)
-coeff_heatflux_to_voltage = np.linspace(0,3,4)
+x = all_data.loc[:, "heat_flux_kWm-2"]
+y = all_data.loc[:, "output_voltage_tolamps"]
+coeff_heatflux_to_voltage = np.polyfit(x,y, poly_degree)
 
 
 coeff_data = pd.DataFrame()
@@ -143,37 +140,6 @@ all_data.loc[:, "output_voltage_tolamps_polyfit"] = np.polyval(
 	coeff_heatflux_to_voltage, all_data.loc[:, "heat_flux_kWm-2"])
 
 
-# additional curves to check response of the lamps
-bool_additional_curves = input("Assess behaviour with linear curves?\n").lower()
-additional_curves = pd.DataFrame()
-constant_heat_fluxes = [15,30,45]
-linear_heat_fluxes = [0.05]
-
-# run constant, linear and quadratic curves for five minutes to investigate response
-if bool_additional_curves in ["y", "yes"]:
-	additional_curves.loc[:, "time"] = np.linspace(0,300,301)
-
-	# create heat flux arrays
-	for hf, heatflux in enumerate(constant_heat_fluxes):
-		additional_curves.loc[:, f"desired_{heatflux}_kWm-2"] = heatflux
-		additional_curves.loc[:, f"desired_{heatflux}_volts"] = np.polyval(
-			coeff_heatflux_to_voltage, 
-			additional_curves.loc[:, f"desired_{heatflux}_kWm-2"].values)
-
-		# run the heat flux curve and measure actual heat flux
-		start = time.time()
-		current = time.time()
-		t = 0
-		while current - start < 300:
-			if np.floor(current - start) > t:
-				print(time.time())
-			else:
-				pass
-			t += 1
-			
-		
-
-
 # save data into calibration data file
 address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\calibration_data"
 name_file = f"{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.xlsx"
@@ -182,7 +148,7 @@ address_file = os.path.join(address_folder, name_file)
 with ExcelWriter(address_file) as writer:
 	all_data.to_excel(writer, sheet_name = "calibration_data", index = False)
 	coeff_data.to_excel(writer, sheet_name = "polynomial_fit")
-	additional_curves.to_excel(writer, sheet_name = "linear_curves", index = False)
+
 # plot
 fig, ax = plt.subplots(1,1,figsize = (12,8))
 ax.set_xlabel("Heat Flux [kW/m2]")
