@@ -65,7 +65,7 @@ for output_voltage in output_voltages:
 	print(f"\n\n ---- Voltage output to the lamps: {np.round(output_voltage,4)} V\n")
 	logger.write(':SOURce:VOLTage %G,(%s)' % (output_voltage, '@304'))
 
-	# wait 7.5 seconds for the lamps to estabilise
+	# wait 10 seconds for the lamps to estabilise
 	time.sleep(10)
 	
 
@@ -99,7 +99,7 @@ for output_voltage in np.flip(output_voltages):
 	print(f"\n\n ---- Voltage output to the lamps: {np.round(output_voltage,4)} V\n")
 	logger.write(':SOURce:VOLTage %G,(%s)' % (output_voltage, '@304'))
 
-	# wait 7.5 seconds for the lamps to estabilise
+	# wait 10 seconds for the lamps to estabilise
 	time.sleep(10)
 
 	for nmr_readings in range(nmbr_readings_pervoltage):
@@ -130,15 +130,17 @@ poly_degree = 3
 x = all_data.loc[:, "heat_flux_kWm-2"]
 y = all_data.loc[:, "output_voltage_tolamps"]
 coeff_heatflux_to_voltage = np.polyfit(x,y, poly_degree)
-
+coeff_voltage_to_heatflux = np.polyfit(y,x, poly_degree)
 
 coeff_data = pd.DataFrame()
-coeff_data.loc[:, "coefficients"] = coeff_heatflux_to_voltage
-coeff_data.loc[0, "Notes"] = "Polyfit. a^n * coeff[0] + ..."
+coeff_data.loc[:, "coefficients_heatflux_to_voltage"] = coeff_heatflux_to_voltage
+coeff_data.loc[:, "coefficients_voltage_to_heatflux"] = coeff_voltage_to_heatflux
+coeff_data.loc[0, "Notes"] = "Polyfit. c[0]*x^3 + c[1]*x^2 + c[2]*x + c[3]"
 
-all_data.loc[:, "output_voltage_tolamps_polyfit"] = np.polyval(
+all_data.loc[:, "polyfit_heatflux_to_voltage"] = np.polyval(
 	coeff_heatflux_to_voltage, all_data.loc[:, "heat_flux_kWm-2"])
-
+all_data.loc[:, "polyfit_voltage_to_heatflux"] = np.polyval(
+	coeff_voltage_to_heatflux, all_data.loc[:, "output_voltage_tolamps"])
 
 # save data into calibration data file
 address_folder = "C:\\Users\\FireLab\\Desktop\\Simon\\FeedbackControl_MassExperiments\\calibration_data"
@@ -150,22 +152,32 @@ with ExcelWriter(address_file) as writer:
 	coeff_data.to_excel(writer, sheet_name = "polynomial_fit")
 
 # plot
-fig, ax = plt.subplots(1,1,figsize = (12,8))
-ax.set_xlabel("Heat Flux [kW/m2]")
-ax.set_ylabel("Voltage to lamps [VDC]")
-ax.scatter(all_data.loc[:, "heat_flux_kWm-2"],
-	all_data.loc[:, "output_voltage_tolamps"],
+fig, axes = plt.subplots(1,2,figsize = (12,8))
+x = all_data.loc[:, "heat_flux_kWm-2"]
+y = all_data.loc[:, "output_voltage_tolamps"]
+
+# format the plot
+for a, ax in enumerate(axes):
+	ax.set_xlim([[0,70],[0,5]][a])
+	ax.set_xticks([np.linspace(0,70,8), np.linspace(0,5,6)][a])
+	ax.set_ylim([[0,5],[0,70]][a])
+	ax.set_yticks([np.linspace(0,5,6), np.linspace(0,70,8)][a])
+	ax.set_xlabel(["Heat Flux [kW/m2]", "Voltage to lamps (VDC)"][a])
+	ax.set_ylabel(["Voltage to lamps (VDC)", "Heat Flux [kW/m2]"][a])
+
+# plot both regressions
+axes[1].scatter(y,x,
 	color = "dodgerblue", alpha = 0.5)
-ax.plot(all_data.loc[:, "heat_flux_kWm-2"],
-	all_data.loc[:, "output_voltage_tolamps_polyfit"],
+axes[1].plot(y, all_data.loc[:, "polyfit_voltage_to_heatflux"],
 	color = "maroon",
 	linewidth = 2)
-ax.set_xlim([0,70])
-ax.set_xticks(np.linspace(0,70,8))
-ax.set_ylim([0,5])
-ax.set_yticks(np.linspace(0,5,6))
-ax.grid(True, linewidth = 0.7, linestyle = "--", color = "gainsboro", 
-	alpha = 0.75)
+axes[0].scatter(x,y,
+	color = "dodgerblue", alpha = 0.5)
+axes[0].plot(x, all_data.loc[:, "polyfit_heatflux_to_voltage"],
+	color = "maroon",
+	linewidth = 2)
+
+
 address_plot = f"{address_file.split('.xlsx')[0]}.pdf"
 plt.savefig(address_plot)
 

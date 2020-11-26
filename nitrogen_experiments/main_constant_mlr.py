@@ -104,16 +104,13 @@ epsilon = 0.1   # %
 max_lamp_voltage = 4.5
 min_lamp_voltage = 0.25
 
-# convert irradiation rate using the calibration coefficients 
-# (from kW/m-2s to volts/s)
-calibration_coefficients = extract_calibrationcoeff()
-irradiation_rate_volts = np.polyval(calibration_coefficients, 
-	irradiation_rate)
-
+# extract regression coefficients from the latest calibration file
+coeff_hftovolts, coeff_voltstohf = extract_calibrationcoeff()
 
 # create arrays large enough to accomodate one hour of data at the pre-set maximum logging frequency
 t_array = np.zeros(int(3600/time_logging_period))
 IHF = np.zeros_like(t_array)
+IHF_volts = np.zeros_like(t_array)
 mass = np.zeros_like(t_array)
 mlr = np.zeros_like(t_array)
 mlr_moving_average_array = np.zeros_like(t_array)
@@ -130,8 +127,10 @@ PID_derivative_term_array = np.zeros_like(t_array)
 # open csv file to write data
 with open(full_name_of_file, "w", newline = "") as handle:
 	writer = csv.writer(handle)
-	writer.writerows([['time_seconds', "mass_g", "IHF_volts", "mlr_g/m-2s-1", 
-		"mlr_movingaverage_gm-2s-1", "Observations", "PID_state"]])
+	writer.writerows([['time_seconds', "mass_g", 
+		"IHF_volts", "IHF_kwm-2",
+		"mlr_g/m-2s-1", "mlr_movingaverage_gm-2s-1", 
+		"Observations", "PID_state"]])
 
 	# record the number of readings
 	time_step = 0
@@ -139,7 +138,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 	# ------
 	# record mass for a period of 60 seconds before starting
 	# ------
-	print("\nGathering data for 60 seconds before testing")
+	print(f"\nGathering data for {time_pretesting_period} seconds before testing")
 	time.sleep(2)
 
 	time_start_logging = time.time()
@@ -168,11 +167,15 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 			# write data to the csv file
 			if time_step == 0:
-				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step], 
-					mlr_moving_average_array[time_step], "start_logging", PID_state]])
+				writer.writerows([[t_array[time_step], mass[time_step], 
+					IHF_volts[time_step], IHF[time_step],
+					mlr[time_step], mlr_moving_average_array[time_step], 
+					"start_logging", PID_state]])
 			else:
-				writer.writerows([[t_array[time_step], mass[time_step], IHF[time_step], mlr[time_step],
-					mlr_moving_average_array[time_step],"", PID_state]])
+				writer.writerows([[t_array[time_step], mass[time_step], 
+					IHF_volts[time_step], IHF[time_step], 
+					mlr[time_step],	mlr_moving_average_array[time_step],
+					"", PID_state]])
 
 
 			previous_log = time.time()
@@ -208,12 +211,9 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				# query mass and update array
 				mass[time_step] = load_cell.query_weight()
 				
-				# calculate the instantaneous mlr
-				mlr[time_step] = - np.round((
-					mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/0.1/0.1,1)
-
 				# calculate mlr and force all negative readings to zero
-				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / (t_array[time_step] - t_array[time_step-1])/surface_area,1)
+				mlr[time_step] = - np.round((mass[time_step] - mass[time_step-1]) / 
+					(t_array[time_step] - t_array[time_step-1])/surface_area,1)
 				mlr_moving_average = mlr[time_step - averaging_window:time_step].mean()
 				mlr_moving_average_array[time_step] = mlr_moving_average
 
@@ -227,12 +227,16 @@ with open(full_name_of_file, "w", newline = "") as handle:
 				# start with a ramped IHF, and once mlr reaches 0.8*mlr_desired, activate PID
 				if PID_state == "not_active":
 					IHF[time_step+1] = (t_array[time_step] - 
-						t_array[time_step_lastpretest]) * irradiation_rate_volts
-					voltage_output = IHF[time_step+1]
+						t_array[time_step_lastpretest]) * irradiation_rate
+					IHF_volts[time_step+1] = np.polyval(
+						coeff_hftovolts,IHF[time_step+1])
+					voltage_output = IHF_volts[time_step+1]
 
 					if voltage_output > max_lamp_voltage:
 						voltage_output = max_lamp_voltage
-						IHF[time_step+1] = max_lamp_voltage
+						IHF_volts[time_step+1] = max_lamp_voltage
+						IHF[time_step+1] = np.polyval(
+							coeff_voltstohf, IHF_volts[time_step+1])
 
 					if mlr_moving_average > 0.8*mlr_desired:
 						PID_state = "active"
@@ -258,7 +262,9 @@ with open(full_name_of_file, "w", newline = "") as handle:
 											input_mlr, mlr_desired, previous_pid_time, 
 											last_error, last_input, pid_integral_term, PID_kp, PID_ki, PID_kd,
 											max_lamp_voltage, min_lamp_voltage)
-					IHF[time_step+1] = voltage_output
+					IHF_volts[time_step+1] = voltage_output
+					IHF[time_step+1] = np.polyval(
+						coeff_voltstohf, IHF_volts[time_step+1])
 					last_input = mlr_moving_average
 
 					PID_proportional_term_array[time_step] = pid_proportional_term
@@ -270,16 +276,21 @@ with open(full_name_of_file, "w", newline = "") as handle:
 
 				# write data to the csv file
 				if bool_start_test:
-					writer.writerows([[t_array[time_step], mass[time_step], voltage_output, 
-						mlr[time_step], mlr_moving_average, "start_test", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], 
+						voltage_output, IHF[time_step+1],
+						mlr[time_step], mlr_moving_average, 
+						"start_test", PID_state]])
 					bool_start_test = False
 				else:
-					writer.writerows([[t_array[time_step], mass[time_step], voltage_output, 
-						mlr[time_step], mlr_moving_average, "", PID_state]])
+					writer.writerows([[t_array[time_step], mass[time_step], 
+						voltage_output, IHF[time_step+1],
+						mlr[time_step], mlr_moving_average, 
+						"", PID_state]])
 
 				# save data as a a dict in a pickle to be read and plotted by another algorithm
 				data_for_pickle = {"time":t_array,
 									"IHF": IHF,
+									"IHF_volts": IHF,
 									"mlr": mlr,
 									"mlr_moving_average": mlr_moving_average_array,
 									"time_step": time_step,
@@ -291,7 +302,10 @@ with open(full_name_of_file, "w", newline = "") as handle:
 					pickle.dump(data_for_pickle, handle)
 
 				# print the result of this iteration to the terminal window
-				print(f"time:{np.round(t_array[time_step],2)} - IHF:{np.round(IHF[time_step+1],2)} - mass: {mass[time_step]} - mlr:{np.round(mlr_moving_average,2)}\n")
+				print(
+					f"time:{np.round(t_array[time_step],2)} - IHF:{np.round(
+						IHF[time_step+1],2)} - mass: {mass[time_step]} - mlr:{np.round(
+						mlr_moving_average,2)}\n")
 
 				previous_log = time.time()
 

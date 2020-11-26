@@ -35,6 +35,9 @@ def extract_calibrationcoeff():
 	# read the coefficients from the latest file
 	file_path = os.path.join(path, latest_file)
 	fit_data = pd.read_excel(file_path, sheet_name = "polynomial_fit")
-	fit_coefficients = fit_data.loc[:, "coefficients"].values
+	fit_coefficients_hftovolts = fit_data.loc[:, 
+		"coefficients_heatflux_to_voltage"].values
+	fit_coefficients_voltstohf = fit_data.loc[:, 
+		"coefficients_voltage_to_heatflux"].values
 
-	return fit_coefficients
+	return fit_coefficients_hftovolts, fit_coefficients_voltstohf
