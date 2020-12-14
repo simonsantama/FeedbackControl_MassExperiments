@@ -3,8 +3,9 @@ FPA experiments
 This algorithm uses a PID to control the IHF from the FPA's lamps so that samples pyrolyse at a constant mlr
 
 Experimental procedure:
-1. Lamps follow a linear heating ramp, with lambda (irradiation rate) = 0.5 kW/m^2 until the 
-mlr is within 25% of the desired value
+1. Lamps follow a linear heating ramp, with lambda 
+(irradiation rate) = 0.25 kW/m^2 until the mlr is within 20% of the 
+desired value.
 2. Once the mlr is within the desired value, the control of the lamps is passed to the PID controller,
 until the test is ended.
 
@@ -49,7 +50,7 @@ rm, logger = DataLogger().new_instrument()
 #####
 while True:
 	try:
-		mlr_desired = int(input("\nInput mlr to be kept contant throughout the test (g/s):\n"))
+		mlr_desired = float(input("\nInput mlr to be kept contant throughout the test (g/s):\n"))
 		number_of_test = input("Input number of test in format XXX:\n" )
 		material = input("Input material:\n").lower()
 
@@ -71,7 +72,7 @@ while True:
 		rm.close()
 		sys.exit()
 
-name_of_folder = name_of_file.split(".")[0]
+name_of_folder = name_of_file.split(".csv")[0]
 full_name_of_file = os.path.join(name_of_folder, name_of_file)
 # create folder with the name of the file
 if not os.path.exists(name_of_folder):
@@ -88,17 +89,16 @@ else:
 #####
 
 print("Starting test")
-time.sleep(2)
 
 # experiment parameters
 time_pretesting_period = 60  # s
 time_logging_period = 0.1    # s
 surface_area = 0.1*0.1       # m2
 averaging_window = 30        # readings
-irradiation_rate = 0.5       # kWm-2s-1
+irradiation_rate = 0.25       # kWm-2s-1
 
 # epsilon is percentage of mlr_desired used to forcefully reduce oscillations
-epsilon = 0.1   # %
+epsilon = 0.2   # %
 
 # FPA lamps
 max_lamp_voltage = 4.5
@@ -117,9 +117,9 @@ mlr_moving_average_array = np.zeros_like(t_array)
 
 # PID
 PID_state = "not_active"
-PID_kp = 0.40
-PID_ki = 0.06
-PID_kd = 0.1
+PID_kp = 0.2
+PID_ki = 0.04
+PID_kd = 0.2
 PID_integral_term_array = np.zeros_like(t_array)
 PID_proportional_term_array = np.zeros_like(t_array)
 PID_derivative_term_array = np.zeros_like(t_array)
@@ -238,7 +238,7 @@ with open(full_name_of_file, "w", newline = "") as handle:
 						IHF[time_step+1] = np.polyval(
 							coeff_voltstohf, IHF_volts[time_step+1])
 
-					if mlr_moving_average > 0.8*mlr_desired:
+					if mlr_moving_average > 0.95*mlr_desired:
 						PID_state = "active"
 						print("\n-----")
 						print("PID ACTIVE")
@@ -298,14 +298,15 @@ with open(full_name_of_file, "w", newline = "") as handle:
 									"PID_integral": PID_integral_term_array,
 									"PID_derivative": PID_derivative_term_array,
 									}
-				with open(f"{full_name_of_file.split('.')[0]}.pkl", "wb") as handle:
+				with open(f"{full_name_of_file.split('.csv')[0]}.pkl", "wb") as handle:
 					pickle.dump(data_for_pickle, handle)
 
 				# print the result of this iteration to the terminal window
-				print(
-					f"time:{np.round(t_array[time_step],2)} - IHF:{np.round(
-						IHF[time_step+1],2)} - mass: {mass[time_step]} - mlr:{np.round(
-						mlr_moving_average,2)}\n")
+				print(f"\nPID state: {PID_state}")
+				print(f"time:{np.round(time.time() - time_start_test,4)}")
+				print(f"IHF:{np.round(IHF[time_step+1],4)}")
+				print(f"mass: {mass[time_step]}")
+				print(f"mlr:{np.round(mlr_moving_average,4)}\n")
 
 				previous_log = time.time()
 
