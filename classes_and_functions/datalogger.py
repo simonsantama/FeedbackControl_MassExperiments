@@ -57,3 +57,31 @@ class DataLogger():
         my_instrument.write(':SOURce:VOLTage %G,(%s)' % (0, '@304'))
         
         return (rm, my_instrument)
+
+    def query_data_for_HRR(my_instrument):
+        """
+        This function queries the voltages and temperatures needed
+        to calculate the HRR
+
+        Returns:
+        -------
+        response: list
+            list of [O2, DPT, CO, CO2, APT, Inlet_O2, RH]
+        response_TCs: list
+            list of [Duct_TC, Ambient_TC]
+
+        """
+        my_instrument.write(':FORMat:READing:CHANnel %d' % (1))
+        my_instrument.write(':FORMat:READing:ALARm %d' % (1))
+        my_instrument.write(':FORMat:READing:UNIT %d' % (1))
+        my_instrument.write(':FORMat:READing:TIME:TYPE %s' % ('REL'))
+        response = my_instrument.query_ascii_values(
+            ':MEASure:VOLTage:DC? %s,(%s)' % (
+                'AUTO', '@101,102,103,104,109,116,201'))
+        response_TCs = my_instrument.query(
+            ':MEASure:TEMPerature? %s,%s,(%s)' % (
+                'TCouple', 'K', '@112,113'))
+
+
+        return response, response_TCs
+        
